@@ -1,0 +1,7 @@
+language: node_js
+before_script:
+    - npm install -g addons-linter
+script: node --check habrareply.js && addons-linter .
+cache:
+  directories:
+    - "node_modules"

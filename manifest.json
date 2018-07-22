@@ -1,0 +1,19 @@
+{
+    "manifest_version": 2,    
+    "name": "HabraReply",
+    "version": "1.0",
+    "description": "Загружает ответы на комментарии в профиле на Хабре",
+    "content_scripts": [
+        {
+            "matches": ["https://habr.com/users/*/comments/", "https://habr.com/users/*/comments/page*"],
+            "js": ["zepto.js-1.2.0/zepto.js", "habrareply.js"],
+            "run_at": "document_idle"
+        }
+    ],
+    "applications": {
+        "gecko": {
+            "id": "habrareply@example.com",
+            "strict_min_version": "45.0"
+        }
+    }
+}
