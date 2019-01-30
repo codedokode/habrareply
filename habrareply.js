@@ -1,53 +1,74 @@
-function init() {
-    initInjectCss();
-    var btn = $('<button class="hr-start-btn btn btn_outline_grey btn_x-large">Загрузить ответы</button>');
-    var userStats = $('.page-header .user-info__stats');
-    if (!userStats.length) {
-        console.error("Cannot find user stats block, maybe markup has changed");
-        $('body').prepend(btn);
-    } else {
-
-        // Find buttons block
-        var buttonsBlock = userStats.find('.user-info__buttons');
-        if (!buttonsBlock.length) {
-            // There is no buttons block for anonymous users
-            buttonsBlock = $('<div class="user-info__buttons"></div>');
-            userStats.append(buttonsBlock);
-        }
-
-        buttonsBlock.prepend(btn);
-    }
-
-    btn.on('click', function () {
-        addOutline(btn, false);
-        btn.text('Загрузка ответов…');
-        function progress(done, errs, total) {
-            btn.text('Загрузка (' + done + '/' + total +')' + (errs > 0 ? ' +' + errs + ' ош.' : ''));
-        }
-
-        var finish = processComments(progress);
-        finish.then(function () {
-            btn.text("✓ Ответы загружены");
-
-            // Cache takes a lot of memory, so free it 
-            loadPostDom.clearCache();
-            loadPost.clearCache();
-        }, function () {
-            addOutline(btn, true);
-            btn.text("✗ Ошибка");
-            loadPostDom.clearCache();
-            loadPost.clearCache();
-        });
-    });
-}
-
+/**
+ * A content script that is injected into Habr.com's profile page.
+ */
 if (document.readyState == 'interactive' || document.readyState == 'complete') {
     init();
 } else {
     document.addEventListener('DOMContentLoaded', init);
 }
 
-function addOutline(btn, enable) {
+function init() {
+    initInjectCss();
+
+    // Add a button to the page
+    var btn = $('<button class="hr-start-btn btn btn_outline_grey btn_x-large">Загрузить ответы</button>');
+    var userStatsBlock = $('.page-header .user-info__stats');
+    if (!userStatsBlock.length) {
+        console.error("Cannot find user stats block, maybe markup has changed");
+        $('body').prepend(btn);
+    } else {
+
+        // Find buttons block
+        var buttonsBlock = userStatsBlock.find('.user-info__buttons');
+        if (!buttonsBlock.length) {
+            // There is no buttons block for anonymous users, so add it ourselves
+            buttonsBlock = $('<div class="user-info__buttons"></div>');
+            userStatsBlock.append(buttonsBlock);
+        }
+
+        buttonsBlock.prepend(btn);
+    }
+
+    btn.on('click', function () {
+
+        function displayProgress(done, errs, total) {
+            btn.text('Загрузка (' + done + '/' + total +')' + (errs > 0 ? ' +' + errs + ' ош.' : ''));
+        }
+
+        addOutlineForButton(btn, false);
+        btn.text('Загрузка ответов…');
+        var finish = processComments(displayProgress);
+
+        finish.then(function () {
+            btn.text("✓ Ответы загружены");
+
+            // Cache takes a lot of memory, so free it 
+            loadPostDom.clearCache();
+        }, function () {
+            addOutlineForButton(btn, true);
+            btn.text("✗ Ошибка");
+            loadPostDom.clearCache();
+        });
+    });
+}
+
+/**
+ * Adds styles to the page
+ */
+function initInjectCss() {
+    var css = [
+        '.hr-more { color: #999; margin-left: 30px; margin-top: 15px; font-size: 11px; }',
+        '.hr-replies { margin: 10px 0 10px 280px; }',
+        '.hr-replies .comment__message { font-size: 12px; }',
+        '.hr-replies .user-info__nickname_small { font-size: 11px; }',
+        '.hr-replies .comment__date-time  { font-size: 11px; }'
+    ].join("\n");
+
+    var style = $('<style>' + css + '</style>');
+    $('head,body').first().append(style);
+}
+
+function addOutlineForButton(btn, enable) {
     if (enable) {
         btn.addClass('btn_outline_grey');
     } else {
@@ -55,64 +76,70 @@ function addOutline(btn, enable) {
     }
 }
 
-function processComments(progressFn) {
+/**
+ * Walk through comments on the page and load replies for each one.
+ */
+function processComments(onProgress) {
     var comments = $('#comments > li > .comment');
-    var finishes = [];
+    var finishPromises = [];
     var done = 0;
     var errs = 0;
     var total = comments.length;
 
-    comments.each(function (index, com) {
-        com = $(com);
-        var finish = processComment(com);
-        finishes.push(finish);
+    comments.each(function (index, comment) {
+        comment = $(comment);
+        var finished = processComment(comment);
+        finishPromises.push(finished);
 
-        finish.then(null, function (e) {
+        finished.then(null, function (e) {
             console.error("Comment process error: " + e.message);
             console.log(e);
         });
 
-        finish.then(function () {
+        finished.then(function () {
             done++;
-            progressFn && progressFn(done, errs, total);
+            onProgress && onProgress(done, errs, total);
         }, function () {
             errs++;
-            progressFn && progressFn(done, errs, total);
+            onProgress && onProgress(done, errs, total);
         });
     });
 
     // TODO: fails too early and clears cache too early
-    return Promise.all(finishes);
+    return Promise.all(finishPromises);
 }
 
-function processComment(com) {
-    var processed = com.attr('data-habrareplied');
-    if (processed) {
+/**
+ * Loads and displays replies for a single comment
+ */
+function processComment(comment) {
+    var alreadyProcessed = comment.attr('data-habrareplied');
+    if (alreadyProcessed) {
         return Promise.resolve(true);
     }
 
-    var m = /^comment_(\d+)$/.exec(com.attr('id') || '');
+    var m = /^comment_(\d+)$/.exec(comment.attr('id') || '');
     if (!m) {
         return Promise.reject(new Error('Invalid id attribute'));
     }
 
     var id = m[1];
-    var href = com.find('.icon_comment-anchor').first().attr('href');
+    var href = comment.find('.icon_comment-anchor').first().attr('href');
     if (!href) {
         return Promise.reject(new Error("Cannot find link at comment " + id));
     }
 
-    var postUrl = parsePostLink(href);
+    var postUrl = extractPostUrl(href);
     if (!postUrl) {
-        return Promise.reject(new Error('Cannot parse post link for comment ' + id));
+        return Promise.reject(new Error('Cannot parse post URL for comment ' + id));
     }
 
-    var finish = loadPostDom(postUrl).then(function (dom) {
+    var finished = loadPostDom(postUrl).then(function (dom) {
         var replies = findRepliesInPost(dom, id);
         replies = removeNestedComments(replies);
-        fixLinkInReplies(replies, postUrl);
+        fixHashUrlsInReplies(replies, postUrl);
 
-        var commentShell = com.closest('.content-list__item_comment');
+        var commentShell = comment.closest('.content-list__item_comment');
         if (!commentShell.length) {
             throw new Error("Cannot find comment shell");
         }
@@ -123,41 +150,18 @@ function processComment(com) {
             repliesWrap.append(replies);
         }
 
-        com.attr('data-habrareplied', 1);
+        comment.attr('data-habrareplied', 1);
 
         return true;
     });
 
-    return finish;
+    return finished;
 }
 
-function parsePostLink(url) {
+function extractPostUrl(url) {
     var m = /(\/post\/\d+\/|\/company\/[^?#]+\/)#/.exec(url);
     return m ? m[1] : null;
 }
-
-function loadPost(url) {
-    if (loadPost.cache[url]) {
-        return loadPost.cache[url];
-    }
-
-    var p = loadPostUncached(url);
-    loadPost.cache[url] = p;
-
-    p.then(null, function (e) {
-        delete loadPost.cache[url];
-        throw new Error("Error loading post " + url + ": " + e.message);
-    });
-
-    return p;
-}
-
-loadPost.clearCache = function () { 
-    loadPost.cache = {};
-};
-
-// { postUrl => Promise<html> }
-loadPost.cache = {};
 
 function loadPostDom(url) {
     if (loadPostDom.cache[url]) {
@@ -206,20 +210,20 @@ function loadPostUncached(url) {
         nextRequestTime = now + WAIT;
     }
 
-    var resp = fetchStartPromise.then(function () {
+    var responsePromise = fetchStartPromise.then(function () {
         return fetch(url);
     });
 
-    var text = resp.then(function (response) {
+    var htmlPromise = responsePromise.then(function (response) {
 
         if (!response.ok) {
-            throw new Error('Load ' + url + 'error: status ' + response.status);
+            throw new Error('Fetch ' + url + ', error: status ' + response.status);
         }
 
         return response.text();
     });
 
-    return text;
+    return htmlPromise;
 }
 
 function findRepliesInPost(dom, commentId) {
@@ -243,7 +247,7 @@ function removeNestedComments(replies) {
     return replies;
 }
 
-function fixLinkInReplies(replies, postUrl) {
+function fixHashUrlsInReplies(replies, postUrl) {
     var linkTags = replies.find('a[href^="#"]');
     linkTags.each(function (index, link) {
         link = $(link);
@@ -254,17 +258,4 @@ function fixLinkInReplies(replies, postUrl) {
             link.attr('href', newHref);
         }
     });
-}
-
-function initInjectCss() {
-    var css = [
-        '.hr-more { color: #999; margin-left: 30px; margin-top: 15px; font-size: 11px; }',
-        '.hr-replies { margin: 10px 0 10px 280px; }',
-        '.hr-replies .comment__message { font-size: 12px; }',
-        '.hr-replies .user-info__nickname_small { font-size: 11px; }',
-        '.hr-replies .comment__date-time  { font-size: 11px; }'
-    ].join("\n");
-
-    var style = $('<style>' + css + '</style>');
-    $('head,body').first().append(style);
 }

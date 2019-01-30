@@ -1,5 +1,7 @@
 # HabraReply [![Статус сборки](https://travis-ci.org/codedokode/habrareply.svg?branch=master)](https://travis-ci.org/codedokode/habrareply)
 
+English description goes below.
+
 Браузерное расширение для Chrome (>= 46.0) и FF (>= 45.0) для показа ответов на комментарии в профиле пользователя на Хабрахабре. Под каждым комментарием оно подгружает ответы на него.
 
 Демо:
@@ -39,3 +41,17 @@ Firefox: откройте страницу <about:debugging>, вкладку add
 - работает очень медленно и потребляет очень много ОЗУ
 - если происходит ошибка, то сообщение о ней на кнопке показывается до того, как загрузка завершится полностью
 - если происходит ошибка, то кеш DOM-деревьев страниц может быть не очищен и вкладка продолжит потреблять большое количество памяти
+
+## Сборка для Firefox
+
+Для сборки нужно установить Node.JS, утилиту [web-ext](https://github.com/mozilla/web-ext) и выполнить команду `web-ext build` в директории с расширением.
+
+## Тестирование
+
+Для проверки расширения необходимо установить Node.JS, утилиту [addons-linter](https://github.com/mozilla/addons-linter) и выполнить команду `addons-linter .` в директории с расширением.
+
+## English description
+
+HabraReply is an extension to load and display replies for comments on Habr.com user's profile page.
+
+To build an extension, install [web-ext](https://github.com/mozilla/web-ext) and run `web-ext build` in the extension directory.
